@@ -1,0 +1,55 @@
+void schedule.tasks_new_orders()
+{
+	iterator = (zoho.currentdate.toString("yy")).toLong() - 19;
+	info "ITERATOR = " + iterator;
+iterations = repeat(",", iterator);
+year = 2018;
+for each iteration in iterations
+{
+	checkDate = year + zoho.currentdate.subDay(25).toString("-MM-dd");
+	queryMap = Map();
+	queryMap.put("select_query", "select Account_Name, Date_Signing_Contract, Owner.id from Accounts where Date_Signing_Contract = '"+ checkDate +"' limit 100");
+	response = invokeurl
+	[
+		url: "https://www.zohoapis.com/crm/v8/coql"
+		type: POST
+		parameters: queryMap.toString()
+		connection: "crm_coql"
+	];
+	info "FOR DATE " + checkDate + " RESPONSE IS ";
+	info response;
+	if ( !response.isNull() ) 
+    {
+		bulkList = List();
+		for each account in response.get("data")
+        {
+			ownerId = account.get("Owner.id");
+			user = zoho.crm.getRecordById("users", ownerId);
+			//info "user " + user;
+			status = user.get("users").get(0).get("status");
+			info "user status " + status;
+			taskOwner = if(status == "disabled", null, ownerId);
+			//TASK CREATE
+ 			today = now.addMinutes(10).toString("yyyy-MM-dd'T'HH:mm:ss");
+			alarm_value = "FREQ=NONE;ACTION=POPUP;TRIGGER=DATE-TIME:" + today;
+			task_values = Map();
+			Remind_Map = Map();
+			Remind_Map.put("ALARM", alarm_value);
+			task_values.put("Remind_At", Remind_Map);
+			task_values.put("Subject", "Нагадування: зателефонувати клієнту щодо повторного замовлення - " + account.get("Account_Name"));
+			task_values.put("$se_module", "Accounts");
+			task_values.put("What_Id", account.get("id"));
+			task_values.put("Owner", taskOwner);
+			task_values.put("Due_Date", zoho.currentdate.addBusinessDay(3));
+			task_values.put("Status", "Не запущена");
+			task_values.put("Send_Notification_Email", false);
+			task_values.put("Priority", "Высокий");
+			//info "task_values " + task_values;
+			bulkList.add(task_values);
+        }
+		info bulkList;
+		info zoho.crm.bulkCreate("Tasks", bulkList, {"trigger": {"workflow"}});
+    }
+	year += 1;
+}
+}
